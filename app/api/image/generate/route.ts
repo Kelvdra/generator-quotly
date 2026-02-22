@@ -67,6 +67,7 @@ async function fetchImageBuffer(url: string) {
 }
 
 export async function POST(req: Request) {
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas")
   const body = (await req.json()) as Payload;
   const name = (body.name || "").trim();
   const text = (body.text || "").trim();
