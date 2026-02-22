@@ -67,7 +67,7 @@ async function fetchImageBuffer(url: string) {
 }
 
 export async function POST(req: Request) {
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas")
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const body = (await req.json()) as Payload;
   const name = (body.name || "").trim();
   const text = (body.text || "").trim();
@@ -153,11 +153,11 @@ export async function POST(req: Request) {
     ctx.fillText(lines[i], cx, cy + 68 + i * lineH);
   }
 
-  const png = canvas.toBuffer("image/png");
-  return new NextResponse(png, {
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "no-store",
-    },
-  });
+  const png = canvas.toBuffer("image/png"); // Buffer
+return new NextResponse(new Uint8Array(png), {
+  headers: {
+    "Content-Type": "image/png",
+    "Cache-Control": "no-store",
+  },
+});
 }
