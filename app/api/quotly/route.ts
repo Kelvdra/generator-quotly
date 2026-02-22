@@ -1,31 +1,18 @@
-import { NextResponse } from "next/server";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
-export const runtime = "nodejs"; // penting untuk canvas
+export const runtime = "nodejs";
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function roundRect(
-  ctx: any,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
-  const rr = r;
+function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.lineTo(x + w - rr, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
-  ctx.lineTo(x + w, y + h - rr);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-  ctx.lineTo(x + rr, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
-  ctx.lineTo(x, y + rr);
-  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
 }
 
@@ -49,12 +36,9 @@ function wrapText(ctx: any, text: string, maxWidth: number) {
 }
 
 async function fetchImageAsBuffer(url: string) {
-  // PENTING: gunakan proxy kamu biar menghindari CORS/limit/cek image
-  // (kalau mau langsung juga boleh, tapi proxy lebih aman)
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`avatar fetch failed: ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  return buf;
+  return Buffer.from(await res.arrayBuffer());
 }
 
 export async function GET(req: Request) {
@@ -62,10 +46,11 @@ export async function GET(req: Request) {
 
   const name = (searchParams.get("name") || "hydra").slice(0, 40);
   const textRaw = searchParams.get("text") || "halo guys anjay";
-  const text = textRaw.slice(0, 400); // batasi biar GET ga kebablasan
-  const avatar = searchParams.get("avatar") || "https://telegra.ph/file/1e22e45892774893eb1b9.jpg";
+  const text = textRaw.slice(0, 400);
+  const avatar =
+    searchParams.get("avatar") || "https://telegra.ph/file/1e22e45892774893eb1b9.jpg";
 
-  // ukuran + layout mirip contoh kamu
+  // ====== CANVAS INIT (INI WAJIB) ======
   const W = 1600;
   const H = 900;
   const canvas = createCanvas(W, H);
@@ -75,21 +60,23 @@ export async function GET(req: Request) {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, H);
 
-  // bubble putih
-  const bubbleX = 340;
-  const bubbleY = 120;
-  const bubbleW = 1200;
-  const bubbleH = 520;
-  roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 90);
-  ctx.fillStyle = "#fff";
-  ctx.fill();
-
-  // avatar lingkaran kiri
+  // ====== LAYOUT ======
   const avX = 120;
   const avY = 120;
   const avSize = 220;
 
-  // ambil avatar (kalau mau pakai proxy kamu: /api/image?url=...)
+  const gap = 70; // jarak avatar ke bubble (naikin biar ga mepet)
+  const bubbleX = avX + avSize + gap;
+  const bubbleY = 90;
+  const bubbleW = W - bubbleX - 80;
+  const bubbleH = 520;
+
+  // bubble putih
+  roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 90);
+  ctx.fillStyle = "#fff";
+  ctx.fill();
+
+  // ====== AVATAR ======
   const avatarUrl = avatar.startsWith("http")
     ? avatar
     : "https://telegra.ph/file/1e22e45892774893eb1b9.jpg";
@@ -105,26 +92,25 @@ export async function GET(req: Request) {
   ctx.drawImage(avImg, avX, avY, avSize, avSize);
   ctx.restore();
 
-  // text area
+  // ====== TEXT ======
   const textX = bubbleX + 110;
-  const nameY = bubbleY + 180;
-  const msgYStart = bubbleY + 320;
+  const nameY = bubbleY + 190;
+  const msgYStart = bubbleY + 330;
   const maxTextWidth = bubbleW - 180;
 
   // username (orange)
-  ctx.font = "bold 120px Arial";
   ctx.fillStyle = "#f59e0b";
+  ctx.font = "bold 120px sans-serif";
   ctx.fillText(name, textX, nameY);
 
   // message (black)
   const fontSize = 120;
-  ctx.font = `${fontSize}px Arial`;
   ctx.fillStyle = "#111";
+  ctx.font = `${fontSize}px sans-serif`;
 
   const lines = wrapText(ctx, text, maxTextWidth);
-  const lineHeight = Math.floor(fontSize * 1.1);
+  const lineHeight = Math.floor(fontSize * 1.12);
 
-  // kalau kepanjangan, crop jadi beberapa baris
   const maxLines = 3;
   const used = lines.slice(0, maxLines);
   if (lines.length > maxLines) {
@@ -135,11 +121,12 @@ export async function GET(req: Request) {
     ctx.fillText(ln, textX, msgYStart + i * lineHeight);
   });
 
+  // ====== RETURN PNG ======
   const png = canvas.toBuffer("image/png");
   return new Response(new Uint8Array(png), {
-  headers: {
-    "Content-Type": "image/png",
-    "Cache-Control": "no-store",
-  },
-});
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "no-store",
+    },
+  });
 }
