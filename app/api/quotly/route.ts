@@ -83,11 +83,11 @@ async function fetchImageAsBuffer(url: string) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-export async function GET(name, text, req: Request) {
+export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
-  const senderName = name
-  const messageText = text
+  const senderName = (searchParams.get("name") || "hydra").slice(0, 40);
+  const messageText = (searchParams.get("text") || "halo").slice(0, 400);
   const avatarUrl = searchParams.get("avatar") || DEFAULT_AVATAR;
   const bg = searchParams.get("bg") || "#000000";
 
