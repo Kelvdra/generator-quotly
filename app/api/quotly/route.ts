@@ -1,6 +1,14 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
+import path from "path";
 
 export const runtime = "nodejs";
+
+// Register font sekali (di module scope)
+const fontRegular = path.join(process.cwd(), "public/fonts/Inter-Regular.ttf");
+const fontBold = path.join(process.cwd(), "public/fonts/Inter-Bold.ttf");
+
+GlobalFonts.registerFromPath(fontRegular, "Inter");
+GlobalFonts.registerFromPath(fontBold, "Inter Bold");
 
 function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -23,8 +31,7 @@ function wrapText(ctx: any, text: string, maxWidth: number) {
 
   for (const w of words) {
     const test = line ? `${line} ${w}` : w;
-    const m = ctx.measureText(test).width;
-    if (m > maxWidth && line) {
+    if (ctx.measureText(test).width > maxWidth && line) {
       lines.push(line);
       line = w;
     } else {
@@ -45,83 +52,64 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const name = (searchParams.get("name") || "hydra").slice(0, 40);
-  const textRaw = searchParams.get("text") || "halo guys anjay";
-  const text = textRaw.slice(0, 400);
+  const text = (searchParams.get("text") || "halo guys anjay").slice(0, 400);
   const avatar =
     searchParams.get("avatar") || "https://telegra.ph/file/1e22e45892774893eb1b9.jpg";
 
-  // ====== CANVAS INIT (INI WAJIB) ======
   const W = 1600;
   const H = 900;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
 
-  // background hitam
+  // background
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, H);
 
-  // ====== LAYOUT ======
-  const avX = 120;
-  const avY = 120;
-  const avSize = 220;
-
-  const gap = 70; // jarak avatar ke bubble (naikin biar ga mepet)
+  // layout
+  const avX = 120, avY = 120, avSize = 220;
+  const gap = 70;
   const bubbleX = avX + avSize + gap;
   const bubbleY = 90;
   const bubbleW = W - bubbleX - 80;
   const bubbleH = 520;
 
-  // bubble putih
+  // bubble
   roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 90);
   ctx.fillStyle = "#fff";
   ctx.fill();
 
-  // ====== AVATAR ======
-  const avatarUrl = avatar.startsWith("http")
-    ? avatar
-    : "https://telegra.ph/file/1e22e45892774893eb1b9.jpg";
-
-  const avBuf = await fetchImageAsBuffer(avatarUrl);
+  // avatar
+  const avBuf = await fetchImageAsBuffer(avatar);
   const avImg = await loadImage(avBuf);
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(avX + avSize / 2, avY + avSize / 2, avSize / 2, 0, Math.PI * 2);
-  ctx.closePath();
   ctx.clip();
   ctx.drawImage(avImg, avX, avY, avSize, avSize);
   ctx.restore();
 
-  // ====== TEXT ======
+  // text
   const textX = bubbleX + 110;
   const nameY = bubbleY + 190;
   const msgYStart = bubbleY + 330;
   const maxTextWidth = bubbleW - 180;
 
-  // username (orange)
+  ctx.textBaseline = "alphabetic";
+
+  // username
   ctx.fillStyle = "#f59e0b";
-  ctx.font = "bold 120px sans-serif";
+  ctx.font = '120px "Inter Bold"';
   ctx.fillText(name, textX, nameY);
 
-  // message (black)
-  const fontSize = 120;
+  // message
   ctx.fillStyle = "#111";
-  ctx.font = `${fontSize}px sans-serif`;
+  ctx.font = '120px "Inter"';
 
-  const lines = wrapText(ctx, text, maxTextWidth);
-  const lineHeight = Math.floor(fontSize * 1.12);
+  const lines = wrapText(ctx, text, maxTextWidth).slice(0, 3);
+  const lineHeight = 134;
+  lines.forEach((ln, i) => ctx.fillText(ln, textX, msgYStart + i * lineHeight));
 
-  const maxLines = 3;
-  const used = lines.slice(0, maxLines);
-  if (lines.length > maxLines) {
-    used[maxLines - 1] = used[maxLines - 1].replace(/\s+\S*$/, "") + "…";
-  }
-
-  used.forEach((ln, i) => {
-    ctx.fillText(ln, textX, msgYStart + i * lineHeight);
-  });
-
-  // ====== RETURN PNG ======
   const png = canvas.toBuffer("image/png");
   return new Response(new Uint8Array(png), {
     headers: {
