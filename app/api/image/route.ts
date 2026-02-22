@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 export const runtime = "nodejs";
 
@@ -68,8 +67,8 @@ async function fetchImageBuffer(url: string) {
 }
 
 export async function POST(req: Request) {
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const body = (await req.json()) as Payload;
-
   const name = (body.name || "").trim();
   const text = (body.text || "").trim();
   if (!name) return NextResponse.json({ ok: false, message: "name required" }, { status: 400 });
