@@ -136,11 +136,10 @@ export async function GET(req: Request) {
   });
 
   const png = canvas.toBuffer("image/png");
-
-  return new NextResponse(png, {
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "no-store",
-    },
-  });
+  return new Response(new Uint8Array(png), {
+  headers: {
+    "Content-Type": "image/png",
+    "Cache-Control": "no-store",
+  },
+});
 }
