@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import path from "path";
 
 export const runtime = "nodejs";
 
@@ -58,20 +59,56 @@ function wrapLines(ctx: any, text: string, maxWidth: number) {
 
 async function fetchImageBuffer(url: string) {
   const u = new URL(url);
-  if (!["http:", "https:"].includes(u.protocol)) throw new Error("Invalid image url protocol");
-  const res = await fetch(u.toString(), { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!["http:", "https:"].includes(u.protocol)) {
+    throw new Error("Invalid image url protocol");
+  }
+
+  const res = await fetch(u.toString(), {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+
   if (!res.ok) throw new Error("Failed fetch image");
+
   const ct = res.headers.get("content-type") || "";
   if (!ct.startsWith("image/")) throw new Error("URL is not an image");
+
   return Buffer.from(await res.arrayBuffer());
 }
 
+function registerFonts(GlobalFonts: any) {
+  // Folder font: /assets/fonts (tidak pakai /public)
+  const regularPath = path.join(process.cwd(), "assets", "fonts", "Inter-Regular.ttf");
+  const boldPath = path.join(process.cwd(), "assets", "fonts", "Inter-Bold.ttf");
+
+  // Supaya gak register berkali-kali
+  // (GlobalFonts.has() tergantung versi, jadi kita pakai try-catch aman)
+  try {
+    // Kalau font family "Inter" sudah ada, skip
+    const fams: string[] = GlobalFonts.families ?? [];
+    if (Array.isArray(fams) && fams.includes("Inter")) return;
+  } catch {
+    // ignore
+  }
+
+  // Register
+  GlobalFonts.registerFromPath(regularPath, "Inter");
+  GlobalFonts.registerFromPath(boldPath, "Inter Bold");
+}
+
 export async function POST(req: Request) {
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const { createCanvas, loadImage, GlobalFonts } = await import("@napi-rs/canvas");
+
+  // Penting: register font agar text selalu muncul di Vercel
+  registerFonts(GlobalFonts);
+
   const body = (await req.json()) as Payload;
+
   const name = (body.name || "").trim();
   const text = (body.text || "").trim();
-  if (!name) return NextResponse.json({ ok: false, message: "name required" }, { status: 400 });
+
+  if (!name) {
+    return NextResponse.json({ ok: false, message: "name required" }, { status: 400 });
+  }
 
   const W = clamp(body.width ?? 800, 320, 1400);
   const H = clamp(body.height ?? 420, 240, 1400);
@@ -110,21 +147,26 @@ export async function POST(req: Request) {
   const bubbleMaxW = W - bubbleX - padding;
 
   const nameColor = "#f7931a";
-  const nameFont = "700 64px Arial";
-  const textFont = "500 64px Arial";
+
+  // Gunakan font yang kita register (bukan Arial)
+  const nameFont = '700 64px "Inter Bold"';
+  const textFont = '500 64px "Inter"';
 
   const innerPadX = 46;
   const innerPadTop = 34;
   const innerPadBottom = 34;
   const lineH = 74;
 
+  // wrap message lines
   ctx.font = textFont;
   const wrapMax = Math.max(140, bubbleMaxW - innerPadX * 2);
   const lines = wrapLines(ctx, text, wrapMax);
 
+  // measure name width
   ctx.font = nameFont;
   const nameW = ctx.measureText(name).width;
 
+  // measure message max line width
   ctx.font = textFont;
   let msgW = 0;
   for (const ln of lines) msgW = Math.max(msgW, ctx.measureText(ln).width);
@@ -132,32 +174,44 @@ export async function POST(req: Request) {
   const contentW = Math.max(nameW, msgW);
   const bubbleW = clamp(contentW + innerPadX * 2, 260, bubbleMaxW);
 
-  const bubbleH = innerPadTop + 70 + 14 + lines.length * lineH + innerPadBottom;
+  // kalau text kosong, tetap kasih tinggi minimal
+  const msgLinesCount = Math.max(1, lines.length);
+  const bubbleH = innerPadTop + 70 + 14 + msgLinesCount * lineH + innerPadBottom;
 
+  // draw bubble
   ctx.fillStyle = "#fff";
   roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 70);
   ctx.fill();
 
-  // text
-  let cx = bubbleX + innerPadX;
+  // draw text
+  const cx = bubbleX + innerPadX;
   let cy = bubbleY + innerPadTop;
 
+  // name
   ctx.fillStyle = nameColor;
   ctx.font = nameFont;
+  ctx.textBaseline = "alphabetic";
   ctx.fillText(name, cx, cy + 60);
   cy += 70;
 
+  // message
   ctx.fillStyle = "#111";
   ctx.font = textFont;
-  for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], cx, cy + 68 + i * lineH);
+
+  if (lines.length === 0) {
+    // kalau text kosong, biar nggak terlihat blank banget
+    ctx.fillText(" ", cx, cy + 68);
+  } else {
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], cx, cy + 68 + i * lineH);
+    }
   }
 
-  const png = canvas.toBuffer("image/png"); // Buffer
-return new NextResponse(new Uint8Array(png), {
-  headers: {
-    "Content-Type": "image/png",
-    "Cache-Control": "no-store",
-  },
-});
+  const png = canvas.toBuffer("image/png"); // Buffer (node)
+  return new NextResponse(new Uint8Array(png), {
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "no-store",
+    },
+  });
 }
