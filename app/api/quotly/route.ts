@@ -135,8 +135,9 @@ export async function GET(req: Request) {
     ctx.fillText(ln, textX, msgYStart + i * lineHeight);
   });
 
-  const png = canvas.toBuffer("image/png"); // Buffer (node)
-  return new NextResponse(new Uint8Array(png), {
+  const png = canvas.toBuffer("image/png");
+
+  return new NextResponse(png, {
     headers: {
       "Content-Type": "image/png",
       "Cache-Control": "no-store",
