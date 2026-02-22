@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs"; // aman di Vercel
+export const runtime = "nodejs";
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8MB limit (biar gak kebablasan)
+const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -24,9 +24,7 @@ export async function GET(req: Request) {
   }
 
   const upstream = await fetch(parsed.toString(), {
-    // beberapa host butuh user-agent
     headers: { "User-Agent": "Mozilla/5.0 (QuotlyCanvas/1.0)" },
-    // optional: cache sesuai kebutuhan
     cache: "no-store",
   });
 
@@ -50,7 +48,6 @@ export async function GET(req: Request) {
   return new NextResponse(buf, {
     headers: {
       "Content-Type": contentType,
-      // cache 1 hari (boleh ubah)
       "Cache-Control": "public, max-age=86400",
     },
   });

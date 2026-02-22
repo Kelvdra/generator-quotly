@@ -29,7 +29,13 @@ function roundRect(
   ctx.closePath();
 }
 
-function drawAvatar(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, size: number) {
+function drawAvatar(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  size: number
+) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
@@ -75,7 +81,6 @@ function measureTextLines(ctx: CanvasRenderingContext2D, text: string, maxWidth:
 function proxyUrl(url: string) {
   const u = (url || "").trim();
   if (!u) return "";
-  // kalau sudah same-origin (mis. /some.png), biarin
   if (u.startsWith("/")) return u;
   return `/api/image?url=${encodeURIComponent(u)}`;
 }
@@ -84,7 +89,6 @@ async function loadImage(src: string) {
   if (!src) return null;
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
-    // image dari /api/image itu same-origin, jadi aman
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Failed to load image"));
     img.src = src;
@@ -99,15 +103,14 @@ export default function QuotlyCanvasGenerator() {
   const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR);
   const [bg, setBg] = useState("#000000");
 
-  // ukuran default boleh kamu kunci sesuai kebutuhan
+  // ukuran default mirip contoh (bisa kamu kunci)
   const [scale, setScale] = useState(2);
   const [width, setWidth] = useState(800);
   const [height, setHeight] = useState(420);
 
-  const [status, setStatus] = useState<{ kind: "idle" | "loading" | "ready" | "error"; msg: string }>({
-    kind: "idle",
-    msg: "",
-  });
+  const [status, setStatus] = useState<{ kind: "idle" | "loading" | "ready" | "error"; msg: string }>(
+    { kind: "idle", msg: "" }
+  );
 
   const layout = useMemo(() => {
     const s = clamp(Number(scale) || 2, 1, 4);
@@ -129,6 +132,7 @@ export default function QuotlyCanvasGenerator() {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     ctx.setTransform(s, 0, 0, s, 0, 0);
 
     // background hitam
@@ -137,7 +141,7 @@ export default function QuotlyCanvasGenerator() {
 
     setStatus({ kind: "loading", msg: "Rendering..." });
 
-    // IMPORTANT: pakai proxy biar export aman
+    // Load avatar via proxy (anti CORS tainted)
     let avatarImg: HTMLImageElement | null = null;
     try {
       avatarImg = await loadImage(proxyUrl(avatarUrl || DEFAULT_AVATAR));
@@ -181,12 +185,12 @@ export default function QuotlyCanvasGenerator() {
     const name = (senderName || "").trim() || "Unknown";
     const message = (messageText || "").trim();
 
-    // wrap max: bubble gak boleh kepanjangan (biar “rata”)
+    // wrap max (biar gak kepanjangan, kalau panjang turun ke bawah)
     const wrapMax = Math.max(140, bubbleMaxW - innerPadX * 2);
     ctx.font = textFont;
     const msgLines = measureTextLines(ctx, message, wrapMax);
 
-    // bubble auto-shrink / auto-grow
+    // bubble auto shrink/grow sesuai konten
     ctx.font = nameFont;
     const nameW = ctx.measureText(name).width;
 
@@ -211,11 +215,13 @@ export default function QuotlyCanvasGenerator() {
     let cx = bubbleX + innerPadX;
     let cy = bubbleY + innerPadTop;
 
+    // Name
     ctx.fillStyle = nameColor;
     ctx.font = nameFont;
     ctx.fillText(name, cx, cy + 60);
     cy += nameH;
 
+    // Message
     ctx.fillStyle = "#111111";
     ctx.font = textFont;
     for (let i = 0; i < msgLines.length; i++) {
@@ -265,7 +271,9 @@ export default function QuotlyCanvasGenerator() {
                 value={avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
               />
-              <div className="text-xs text-white/50 mt-1">Diproses via /api/image agar export PNG aman.</div>
+              <div className="text-xs text-white/50 mt-1">
+                Diproxy via <span className="font-mono">/api/image</span> agar export PNG aman.
+              </div>
             </label>
 
             <label className="text-sm md:col-span-2">
@@ -323,12 +331,13 @@ export default function QuotlyCanvasGenerator() {
             <button onClick={draw} className="px-4 py-2 rounded-xl bg-white text-black hover:bg-white/90">
               Render ulang
             </button>
-            <button
-              onClick={downloadPng}
-              className="px-4 py-2 rounded-xl border border-white/15 hover:bg-white/5"
-            >
+            <button onClick={downloadPng} className="px-4 py-2 rounded-xl border border-white/15 hover:bg-white/5">
               Download PNG
             </button>
+          </div>
+
+          <div className="text-xs text-white/50 mt-4 leading-relaxed">
+            Bubble otomatis menyesuaikan teks: pendek = pendek, panjang = melebar sampai batas lalu turun (rata).
           </div>
         </div>
 
@@ -338,9 +347,6 @@ export default function QuotlyCanvasGenerator() {
             <div className="rounded-2xl border border-white/10 overflow-hidden bg-black">
               <canvas ref={canvasRef} />
             </div>
-          </div>
-          <div className="text-xs text-white/50 mt-3">
-            Bubble otomatis menyesuaikan teks: pendek = pendek, panjang = melebar sampai batas lalu turun (rata).
           </div>
         </div>
       </div>
